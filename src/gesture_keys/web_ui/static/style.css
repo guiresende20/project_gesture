@@ -1,0 +1,282 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid #333;
+    margin-bottom: 24px;
+}
+
+header h1 {
+    font-size: 24px;
+    color: #00d4aa;
+}
+
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #666;
+    display: inline-block;
+}
+
+.status-dot.active {
+    background: #00d4aa;
+    box-shadow: 0 0 8px #00d4aa;
+}
+
+.status-dot.paused {
+    background: #ff6b6b;
+}
+
+.btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.btn-toggle {
+    background: #00d4aa;
+    color: #1a1a2e;
+}
+
+.btn-toggle:hover {
+    background: #00b894;
+}
+
+.btn-toggle.paused {
+    background: #ff6b6b;
+}
+
+.btn-save {
+    background: #4a90d9;
+    color: white;
+    margin-top: 16px;
+    width: 100%;
+}
+
+.btn-save:hover {
+    background: #357abd;
+}
+
+.main-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+@media (max-width: 768px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.video-section {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.video-wrapper {
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.detection-info {
+    margin-top: 12px;
+    padding: 12px;
+    background: #0f3460;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 18px;
+}
+
+.gesture-name {
+    font-weight: 700;
+    color: #00d4aa;
+    margin: 0 8px;
+}
+
+.confidence {
+    color: #888;
+    font-size: 14px;
+}
+
+.config-section {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.config-section h2 {
+    font-size: 18px;
+    color: #00d4aa;
+    margin-bottom: 12px;
+    margin-top: 20px;
+}
+
+.config-section h2:first-child {
+    margin-top: 0;
+}
+
+.mappings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mapping-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 60px;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    background: #0f3460;
+    border-radius: 8px;
+}
+
+.mapping-row .gesture-label {
+    font-weight: 600;
+    font-size: 13px;
+    color: #ccc;
+}
+
+.mapping-row input[type="text"] {
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: #fff;
+    font-size: 13px;
+    font-family: monospace;
+}
+
+.mapping-row input[type="text"]:focus {
+    outline: none;
+    border-color: #00d4aa;
+}
+
+.mapping-row input[type="text"].recording {
+    border-color: #ff6b6b;
+    background: #2a1a2e;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #333;
+    border-radius: 24px;
+    transition: 0.3s;
+}
+
+.toggle-slider:before {
+    content: "";
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: #00d4aa;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(20px);
+}
+
+.settings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.setting-row label {
+    min-width: 160px;
+    font-size: 14px;
+}
+
+.setting-row input[type="range"] {
+    flex: 1;
+    accent-color: #00d4aa;
+}
+
+.setting-row span {
+    min-width: 50px;
+    text-align: right;
+    font-family: monospace;
+    font-size: 14px;
+}
+
+.save-status {
+    display: inline-block;
+    margin-left: 12px;
+    font-size: 13px;
+    color: #00d4aa;
+}
