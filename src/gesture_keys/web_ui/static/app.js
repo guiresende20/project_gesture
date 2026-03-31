@@ -16,17 +16,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Load config
     async function loadConfig() {
-        const res = await fetch("/api/config");
-        config = await res.json();
-        renderMappings();
-        cooldownSlider.value = config.cooldown_ms;
-        cooldownValue.textContent = config.cooldown_ms;
-        thresholdSlider.value = config.confidence_threshold;
-        thresholdValue.textContent = config.confidence_threshold.toFixed(2);
+        try {
+            const res = await fetch("/api/config");
+            config = await res.json();
+            renderMappings();
+            cooldownSlider.value = config.cooldown_ms;
+            cooldownValue.textContent = config.cooldown_ms;
+            thresholdSlider.value = config.confidence_threshold;
+            thresholdValue.textContent = config.confidence_threshold.toFixed(2);
+        } catch (e) {
+            console.error("Failed to load config:", e);
+        }
     }
 
     // Render gesture mapping rows
     function renderMappings() {
+        if (!config || !config.mappings) return;
         mappingsList.innerHTML = "";
         for (const [gesture, mapping] of Object.entries(config.mappings)) {
             const row = document.createElement("div");
@@ -34,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const label = document.createElement("span");
             label.className = "gesture-label";
-            label.textContent = gesture.replace("_", " ");
+            label.textContent = gesture.replaceAll("_", " ");
 
             const keyInput = document.createElement("input");
             keyInput.type = "text";
@@ -67,8 +72,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     } else if (key.length === 1) {
                         keys.push(key.toLowerCase());
                     } else {
-                        // F1-F12, Enter, Escape, etc.
-                        keys.push(key.toLowerCase().replace("arrow", ""));
+                        // F1-F12, Enter, Escape, ArrowUp, etc.
+                        const mapped = key.replace(/^Arrow/, "").toLowerCase();
+                        keys.push(mapped);
                     }
 
                     keyInput.value = keys.join(" + ");
@@ -107,7 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Sliders
     cooldownSlider.addEventListener("input", () => {
         cooldownValue.textContent = cooldownSlider.value;
-        config.cooldown_ms = parseInt(cooldownSlider.value);
+        config.cooldown_ms = parseInt(cooldownSlider.value, 10);
     });
 
     thresholdSlider.addEventListener("input", () => {
@@ -117,25 +123,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Save
     saveBtn.addEventListener("click", async () => {
-        const res = await fetch("/api/config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(config),
-        });
-        if (res.ok) {
-            saveStatus.textContent = "Saved!";
-            setTimeout(() => { saveStatus.textContent = ""; }, 2000);
-        } else {
-            saveStatus.textContent = "Error saving";
+        try {
+            const res = await fetch("/api/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(config),
+            });
+            if (res.ok) {
+                saveStatus.textContent = "Saved!";
+                saveStatus.style.color = "#00d4aa";
+                setTimeout(() => { saveStatus.textContent = ""; }, 2000);
+            } else {
+                const data = await res.json();
+                saveStatus.textContent = data.error || "Error saving";
+                saveStatus.style.color = "#ff6b6b";
+            }
+        } catch (e) {
+            saveStatus.textContent = "Connection error";
             saveStatus.style.color = "#ff6b6b";
         }
     });
 
     // Toggle engine
     toggleBtn.addEventListener("click", async () => {
-        const res = await fetch("/api/toggle", { method: "POST" });
-        const data = await res.json();
-        updateStatusUI(data.running);
+        try {
+            const res = await fetch("/api/toggle", { method: "POST" });
+            const data = await res.json();
+            updateStatusUI(data.running);
+        } catch (e) {
+            console.error("Toggle failed:", e);
+        }
     });
 
     function updateStatusUI(running) {

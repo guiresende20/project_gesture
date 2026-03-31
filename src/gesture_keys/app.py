@@ -21,7 +21,11 @@ def main() -> None:
     print("Gesture Keys - Starting...")
 
     # Download model if needed
-    model_path = ensure_model(MODELS_DIR)
+    try:
+        model_path = ensure_model(MODELS_DIR)
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
     # Load config
     config = Config.load(CONFIG_PATH)
@@ -47,7 +51,7 @@ def main() -> None:
     def save_config() -> None:
         config.save(CONFIG_PATH)
         executor.cooldown_ms = config.cooldown_ms
-        engine._confidence_threshold = config.confidence_threshold
+        engine.confidence_threshold = config.confidence_threshold
         print("Config saved.")
 
     # Web UI
@@ -78,7 +82,6 @@ def main() -> None:
     def on_quit() -> None:
         print("Shutting down...")
         engine.stop()
-        sys.exit(0)
 
     # System tray (blocks main thread)
     tray = TrayIcon(on_toggle=on_toggle, on_quit=on_quit)
@@ -86,3 +89,4 @@ def main() -> None:
         tray.run()
     except KeyboardInterrupt:
         on_quit()
+        tray.stop()

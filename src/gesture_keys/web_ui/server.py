@@ -20,6 +20,7 @@ app = Flask(
 _config: Config | None = None
 _engine: GestureEngine | None = None
 _save_callback = None
+_config_lock = threading.Lock()
 
 
 def init_app(config: Config, engine: GestureEngine, save_callback) -> Flask:
@@ -37,34 +38,50 @@ def index():
 
 @app.route("/api/config", methods=["GET"])
 def get_config():
-    return jsonify({
-        "cooldown_ms": _config.cooldown_ms,
-        "confidence_threshold": _config.confidence_threshold,
-        "mappings": {
-            name: {"keys": m.keys, "enabled": m.enabled}
-            for name, m in _config.mappings.items()
-        },
-    })
+    if _config is None:
+        return jsonify({"error": "Not initialized"}), 503
+    with _config_lock:
+        return jsonify({
+            "cooldown_ms": _config.cooldown_ms,
+            "confidence_threshold": _config.confidence_threshold,
+            "mappings": {
+                name: {"keys": m.keys, "enabled": m.enabled}
+                for name, m in _config.mappings.items()
+            },
+        })
 
 
 @app.route("/api/config", methods=["POST"])
 def update_config():
+    if _config is None:
+        return jsonify({"error": "Not initialized"}), 503
+
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid JSON"}), 400
 
-    if "cooldown_ms" in data:
-        _config.cooldown_ms = int(data["cooldown_ms"])
-    if "confidence_threshold" in data:
-        _config.confidence_threshold = float(data["confidence_threshold"])
-    if "mappings" in data:
-        from gesture_keys.config import GestureMapping
-        for name, mapping_data in data["mappings"].items():
-            if name in _config.mappings:
-                _config.mappings[name] = GestureMapping(
-                    keys=mapping_data.get("keys", []),
-                    enabled=mapping_data.get("enabled", False),
-                )
+    with _config_lock:
+        try:
+            if "cooldown_ms" in data:
+                val = int(data["cooldown_ms"])
+                _config.cooldown_ms = max(100, min(val, 5000))
+            if "confidence_threshold" in data:
+                val = float(data["confidence_threshold"])
+                _config.confidence_threshold = max(0.1, min(val, 1.0))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid numeric value"}), 400
+
+        if "mappings" in data:
+            from gesture_keys.config import GestureMapping
+            from gesture_keys.constants import GESTURE_NAMES
+            for name, mapping_data in data["mappings"].items():
+                if name in _config.mappings and name in GESTURE_NAMES:
+                    keys = mapping_data.get("keys", [])
+                    if isinstance(keys, list) and all(isinstance(k, str) for k in keys):
+                        _config.mappings[name] = GestureMapping(
+                            keys=keys,
+                            enabled=bool(mapping_data.get("enabled", False)),
+                        )
 
     if _save_callback:
         _save_callback()
@@ -104,14 +121,18 @@ def _generate_mjpeg():
         if frame is None:
             time.sleep(0.03)
             continue
-        ret, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        if not ret:
+        try:
+            ret, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if not ret:
+                time.sleep(0.03)
+                continue
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
+            )
+        except Exception:
             time.sleep(0.03)
             continue
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
-        )
         time.sleep(0.05)
 
 
