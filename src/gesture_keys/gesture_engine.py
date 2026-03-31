@@ -9,6 +9,17 @@ import cv2
 import numpy as np
 
 
+# MediaPipe hand connections (21 landmarks, pairs of indices)
+_HAND_CONNECTIONS = [
+    (0, 1), (1, 2), (2, 3), (3, 4),       # thumb
+    (0, 5), (5, 6), (6, 7), (7, 8),       # index
+    (0, 9), (9, 10), (10, 11), (11, 12),   # middle
+    (0, 13), (13, 14), (14, 15), (15, 16), # ring
+    (0, 17), (17, 18), (18, 19), (19, 20), # pinky
+    (5, 9), (9, 13), (13, 17),             # palm
+]
+
+
 class GestureEngine(threading.Thread):
     def __init__(
         self,
@@ -65,7 +76,6 @@ class GestureEngine(threading.Thread):
         from mediapipe.tasks.python import vision
 
         self._mp = mp
-        self._vision = vision
 
         base_options = mp_python.BaseOptions(
             model_asset_path=str(self._model_path)
@@ -85,6 +95,10 @@ class GestureEngine(threading.Thread):
             print(f"Error: Could not open camera {self._camera_index}")
             return
 
+        # Reduce camera resolution for better performance
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
         try:
             self._recognition_loop(cap, recognizer)
         finally:
@@ -93,8 +107,12 @@ class GestureEngine(threading.Thread):
 
     def _recognition_loop(self, cap, recognizer) -> None:
         mp = self._mp
+        target_fps = 15
+        frame_interval = 1.0 / target_fps
 
         while not self._stop_event.is_set():
+            loop_start = time.monotonic()
+
             ret, frame = cap.read()
             if not ret:
                 time.sleep(0.01)
@@ -110,21 +128,25 @@ class GestureEngine(threading.Thread):
                 time.sleep(0.03)
                 continue
 
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            result = recognizer.recognize(mp_image)
-
-            if result.hand_landmarks:
-                self._draw_landmarks(frame, result.hand_landmarks[0])
-
+            # Recognize gesture
             gesture_name = None
             gesture_score = 0.0
 
-            if result.gestures and result.gestures[0]:
-                top = result.gestures[0][0]
-                if top.category_name != "None" and top.score >= self._confidence_threshold:
-                    gesture_name = top.category_name
-                    gesture_score = top.score
+            try:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                result = recognizer.recognize(mp_image)
+
+                if result.hand_landmarks:
+                    self._draw_landmarks_cv2(frame, result.hand_landmarks[0])
+
+                if result.gestures and result.gestures[0]:
+                    top = result.gestures[0][0]
+                    if top.category_name != "None" and top.score >= self._confidence_threshold:
+                        gesture_name = top.category_name
+                        gesture_score = top.score
+            except Exception as e:
+                print(f"[GestureEngine] Recognition error: {e}")
 
             self._current_gesture = gesture_name
             self._current_confidence = gesture_score
@@ -138,23 +160,29 @@ class GestureEngine(threading.Thread):
             if gesture_name and self._on_gesture:
                 self._on_gesture(gesture_name, gesture_score)
 
-    def _draw_landmarks(self, frame: np.ndarray, hand_landmarks: list) -> None:
-        from mediapipe.framework.formats import landmark_pb2
+            # FPS limiter — avoid burning CPU
+            elapsed = time.monotonic() - loop_start
+            sleep_time = frame_interval - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
-        mp_drawing = self._mp.solutions.drawing_utils
-        mp_hands = self._mp.solutions.hands
+    def _draw_landmarks_cv2(self, frame: np.ndarray, hand_landmarks: list) -> None:
+        """Draw hand landmarks using pure OpenCV (no protobuf conversion)."""
+        h, w = frame.shape[:2]
 
-        landmark_list = landmark_pb2.NormalizedLandmarkList()
+        # Convert normalized landmarks to pixel coordinates
+        points = []
         for lm in hand_landmarks:
-            landmark = landmark_list.landmark.add()
-            landmark.x = lm.x
-            landmark.y = lm.y
-            landmark.z = lm.z
+            px = int(lm.x * w)
+            py = int(lm.y * h)
+            points.append((px, py))
 
-        mp_drawing.draw_landmarks(
-            frame,
-            landmark_list,
-            mp_hands.HAND_CONNECTIONS,
-            mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
-            mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=1),
-        )
+        # Draw connections
+        for start_idx, end_idx in _HAND_CONNECTIONS:
+            if start_idx < len(points) and end_idx < len(points):
+                cv2.line(frame, points[start_idx], points[end_idx],
+                         (255, 255, 255), 1, cv2.LINE_AA)
+
+        # Draw landmark dots
+        for px, py in points:
+            cv2.circle(frame, (px, py), 3, (0, 255, 0), -1, cv2.LINE_AA)
