@@ -49,6 +49,12 @@ _SPECIAL_KEY_MAP: dict[str, Key] = {
     "f10": Key.f10,
     "f11": Key.f11,
     "f12": Key.f12,
+    "volumeup": Key.media_volume_up,
+    "volumedown": Key.media_volume_down,
+    "volumemute": Key.media_volume_mute,
+    "playpause": Key.media_play_pause,
+    "nexttrack": Key.media_next,
+    "prevtrack": Key.media_previous,
 }
 
 
