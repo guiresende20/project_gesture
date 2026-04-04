@@ -11,8 +11,55 @@ document.addEventListener("DOMContentLoaded", () => {
     const thresholdValue = document.getElementById("threshold-value");
     const saveBtn = document.getElementById("save-btn");
     const saveStatus = document.getElementById("save-status");
+    const presetModal = document.getElementById("preset-modal");
+    const presetGrid = document.getElementById("preset-grid");
+    const modalClose = document.getElementById("modal-close");
 
     let config = null;
+    let activePresetGesture = null;
+
+    // Gesture icons
+    const GESTURE_ICONS = {
+        "Closed_Fist": "\u270a",
+        "Open_Palm": "\u270b",
+        "Pointing_Up": "\u261d\ufe0f",
+        "Thumb_Down": "\ud83d\udc4e",
+        "Thumb_Up": "\ud83d\udc4d",
+        "Victory": "\u270c\ufe0f",
+        "ILoveYou": "\ud83e\udd1f",
+    };
+
+    // Common shortcut presets
+    const PRESETS = [
+        { label: "Enter", keys: ["enter"] },
+        { label: "Space", keys: ["space"] },
+        { label: "Escape", keys: ["esc"] },
+        { label: "Tab", keys: ["tab"] },
+        { label: "Backspace", keys: ["backspace"] },
+        { label: "Delete", keys: ["delete"] },
+        { label: "Up", keys: ["up"] },
+        { label: "Down", keys: ["down"] },
+        { label: "Left", keys: ["left"] },
+        { label: "Right", keys: ["right"] },
+        { label: "Alt + F4", keys: ["alt", "f4"] },
+        { label: "Alt + Tab", keys: ["alt", "tab"] },
+        { label: "Ctrl + C", keys: ["ctrl", "c"] },
+        { label: "Ctrl + V", keys: ["ctrl", "v"] },
+        { label: "Ctrl + Z", keys: ["ctrl", "z"] },
+        { label: "Ctrl + S", keys: ["ctrl", "s"] },
+        { label: "Ctrl + A", keys: ["ctrl", "a"] },
+        { label: "Ctrl + W", keys: ["ctrl", "w"] },
+        { label: "Win + D", keys: ["win", "d"] },
+        { label: "Win + L", keys: ["win", "l"] },
+        { label: "Ctrl+Shift+Esc", keys: ["ctrl", "shift", "esc"] },
+        { label: "Ctrl+Alt+Del", keys: ["ctrl", "alt", "delete"] },
+        { label: "Print Screen", keys: ["printscreen"] },
+        { label: "F5 (Refresh)", keys: ["f5"] },
+        { label: "F11 (Fullscreen)", keys: ["f11"] },
+        { label: "Volume Up", keys: ["volumeup"] },
+        { label: "Volume Down", keys: ["volumedown"] },
+        { label: "Play/Pause", keys: ["playpause"] },
+    ];
 
     // Load config
     async function loadConfig() {
@@ -29,6 +76,17 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Render styled key badges
+    function renderKeyBadges(keys) {
+        if (!keys || keys.length === 0) {
+            return '<span class="key-empty">Not assigned</span>';
+        }
+        return keys.map(k => {
+            const display = k.charAt(0).toUpperCase() + k.slice(1);
+            return `<span class="key-badge">${display}</span>`;
+        }).join('<span class="key-plus">+</span>');
+    }
+
     // Render gesture mapping rows
     function renderMappings() {
         if (!config || !config.mappings) return;
@@ -36,26 +94,93 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const [gesture, mapping] of Object.entries(config.mappings)) {
             const row = document.createElement("div");
             row.className = "mapping-row";
+            row.dataset.gesture = gesture;
 
-            const label = document.createElement("span");
-            label.className = "gesture-label";
-            label.textContent = gesture.replaceAll("_", " ");
+            // Gesture icon + name
+            const labelArea = document.createElement("div");
+            labelArea.className = "gesture-info";
+            const icon = GESTURE_ICONS[gesture] || "";
+            labelArea.innerHTML = `<span class="gesture-icon">${icon}</span><span class="gesture-label">${gesture.replaceAll("_", " ")}</span>`;
 
+            // Shortcut display area
+            const shortcutArea = document.createElement("div");
+            shortcutArea.className = "shortcut-area";
+
+            const keyDisplay = document.createElement("div");
+            keyDisplay.className = "key-display";
+            keyDisplay.innerHTML = renderKeyBadges(mapping.keys);
+            keyDisplay.title = "Click to record new shortcut";
+
+            // Hidden input for recording
             const keyInput = document.createElement("input");
             keyInput.type = "text";
-            keyInput.value = mapping.keys.join(" + ");
-            keyInput.placeholder = "Click and press keys...";
-            keyInput.readOnly = true;
-            keyInput.dataset.gesture = gesture;
+            keyInput.className = "key-recorder";
+            keyInput.style.display = "none";
+            keyInput.placeholder = "Press keys...";
 
-            keyInput.addEventListener("click", () => {
-                keyInput.value = "";
-                keyInput.classList.add("recording");
-                keyInput.placeholder = "Press key combo...";
+            // Action buttons
+            const actions = document.createElement("div");
+            actions.className = "shortcut-actions";
+
+            const recordBtn = document.createElement("button");
+            recordBtn.className = "btn-icon btn-record";
+            recordBtn.innerHTML = "\u2328";
+            recordBtn.title = "Record shortcut";
+
+            const presetBtn = document.createElement("button");
+            presetBtn.className = "btn-icon btn-preset";
+            presetBtn.innerHTML = "\u2630";
+            presetBtn.title = "Choose from presets";
+
+            const clearBtn = document.createElement("button");
+            clearBtn.className = "btn-icon btn-clear";
+            clearBtn.innerHTML = "\u2715";
+            clearBtn.title = "Clear shortcut";
+
+            actions.appendChild(recordBtn);
+            actions.appendChild(presetBtn);
+            actions.appendChild(clearBtn);
+
+            shortcutArea.appendChild(keyDisplay);
+            shortcutArea.appendChild(keyInput);
+            shortcutArea.appendChild(actions);
+
+            // Toggle switch
+            const toggle = document.createElement("label");
+            toggle.className = "toggle-switch";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = mapping.enabled;
+            checkbox.addEventListener("change", () => {
+                config.mappings[gesture].enabled = checkbox.checked;
+                row.classList.toggle("mapping-disabled", !checkbox.checked);
             });
+            const slider = document.createElement("span");
+            slider.className = "toggle-slider";
+            toggle.appendChild(checkbox);
+            toggle.appendChild(slider);
+
+            if (!mapping.enabled) row.classList.add("mapping-disabled");
+
+            // Record click
+            function startRecording() {
+                keyDisplay.style.display = "none";
+                keyInput.style.display = "block";
+                keyInput.value = "";
+                keyInput.focus();
+                row.classList.add("recording");
+            }
+
+            function stopRecording() {
+                keyDisplay.style.display = "flex";
+                keyInput.style.display = "none";
+                row.classList.remove("recording");
+            }
+
+            keyDisplay.addEventListener("click", startRecording);
+            recordBtn.addEventListener("click", startRecording);
 
             keyInput.addEventListener("keydown", (e) => {
-                if (!keyInput.classList.contains("recording")) return;
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -72,43 +197,64 @@ document.addEventListener("DOMContentLoaded", () => {
                     } else if (key.length === 1) {
                         keys.push(key.toLowerCase());
                     } else {
-                        // F1-F12, Enter, Escape, ArrowUp, etc.
                         const mapped = key.replace(/^Arrow/, "").toLowerCase();
                         keys.push(mapped);
                     }
 
-                    keyInput.value = keys.join(" + ");
-                    keyInput.classList.remove("recording");
-                    config.mappings[gesture].keys = keys;
+                    // Limit to 3 keys
+                    const finalKeys = keys.slice(0, 3);
+                    config.mappings[gesture].keys = finalKeys;
+                    keyDisplay.innerHTML = renderKeyBadges(finalKeys);
+                    stopRecording();
                 }
             });
 
-            keyInput.addEventListener("blur", () => {
-                keyInput.classList.remove("recording");
-                if (!keyInput.value) {
-                    keyInput.value = mapping.keys.join(" + ");
-                }
+            keyInput.addEventListener("blur", stopRecording);
+
+            // Preset click
+            presetBtn.addEventListener("click", () => {
+                activePresetGesture = gesture;
+                showPresetModal();
             });
 
-            const toggle = document.createElement("label");
-            toggle.className = "toggle-switch";
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.checked = mapping.enabled;
-            checkbox.addEventListener("change", () => {
-                config.mappings[gesture].enabled = checkbox.checked;
+            // Clear click
+            clearBtn.addEventListener("click", () => {
+                config.mappings[gesture].keys = [];
+                keyDisplay.innerHTML = renderKeyBadges([]);
             });
-            const slider = document.createElement("span");
-            slider.className = "toggle-slider";
-            toggle.appendChild(checkbox);
-            toggle.appendChild(slider);
 
-            row.appendChild(label);
-            row.appendChild(keyInput);
+            row.appendChild(labelArea);
+            row.appendChild(shortcutArea);
             row.appendChild(toggle);
             mappingsList.appendChild(row);
         }
     }
+
+    // Preset modal
+    function showPresetModal() {
+        presetGrid.innerHTML = "";
+        for (const preset of PRESETS) {
+            const btn = document.createElement("button");
+            btn.className = "preset-btn";
+            btn.innerHTML = renderKeyBadges(preset.keys);
+            btn.addEventListener("click", () => {
+                if (activePresetGesture && config.mappings[activePresetGesture]) {
+                    config.mappings[activePresetGesture].keys = [...preset.keys];
+                    renderMappings();
+                }
+                presetModal.style.display = "none";
+            });
+            presetGrid.appendChild(btn);
+        }
+        presetModal.style.display = "flex";
+    }
+
+    modalClose.addEventListener("click", () => {
+        presetModal.style.display = "none";
+    });
+    presetModal.addEventListener("click", (e) => {
+        if (e.target === presetModal) presetModal.style.display = "none";
+    });
 
     // Sliders
     cooldownSlider.addEventListener("input", () => {
@@ -162,7 +308,7 @@ document.addEventListener("DOMContentLoaded", () => {
         toggleBtn.className = "btn btn-toggle" + (running ? "" : " paused");
     }
 
-    // Poll status
+    // Poll status - highlight active gesture
     async function pollStatus() {
         try {
             const res = await fetch("/api/status");
@@ -172,6 +318,12 @@ document.addEventListener("DOMContentLoaded", () => {
             detectedConfidence.textContent = data.gesture
                 ? `(${(data.confidence * 100).toFixed(0)}%)`
                 : "";
+
+            // Highlight active gesture row
+            document.querySelectorAll(".mapping-row").forEach(row => {
+                row.classList.toggle("gesture-active",
+                    row.dataset.gesture === data.gesture);
+            });
         } catch { /* ignore */ }
     }
 
