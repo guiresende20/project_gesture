@@ -31,6 +31,7 @@
 
             <section class="config-section">
                 <h2>Gesture Mappings</h2>
+                <p class="section-hint">Click the shortcut field and press your key combination (up to 3 keys)</p>
                 <div id="mappings-list" class="mappings-list">
                     <!-- Populated by JS -->
                 </div>
@@ -52,6 +53,21 @@
                 <button id="save-btn" class="btn btn-save">Save Configuration</button>
                 <span id="save-status" class="save-status"></span>
             </section>
+        </div>
+    </div>
+
+    <!-- Preset modal -->
+    <div id="preset-modal" class="modal-overlay" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Quick Presets</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="preset-grid" id="preset-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
         </div>
     </div>
 

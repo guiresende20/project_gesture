@@ -100,6 +100,7 @@ header h1 {
     }
 }
 
+/* Video Section */
 .video-section {
     background: #16213e;
     border-radius: 12px;
@@ -142,16 +143,19 @@ header h1 {
     font-size: 14px;
 }
 
+/* Config Section */
 .config-section {
     background: #16213e;
     border-radius: 12px;
     padding: 20px;
+    overflow-y: auto;
+    max-height: 85vh;
 }
 
 .config-section h2 {
     font-size: 18px;
     color: #00d4aa;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     margin-top: 20px;
 }
 
@@ -159,48 +163,182 @@ header h1 {
     margin-top: 0;
 }
 
+.section-hint {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 12px;
+}
+
+/* Mapping Rows */
 .mappings-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .mapping-row {
     display: grid;
-    grid-template-columns: 140px 1fr 60px;
+    grid-template-columns: 130px 1fr 50px;
     gap: 10px;
     align-items: center;
-    padding: 10px 12px;
+    padding: 10px 14px;
     background: #0f3460;
-    border-radius: 8px;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    transition: border-color 0.3s, background 0.3s, opacity 0.3s;
 }
 
-.mapping-row .gesture-label {
+.mapping-row.recording {
+    border-color: #ff6b6b;
+    background: #1a1040;
+}
+
+.mapping-row.gesture-active {
+    border-color: #00d4aa;
+    background: #0a2a4a;
+}
+
+.mapping-row.mapping-disabled {
+    opacity: 0.5;
+}
+
+/* Gesture Info */
+.gesture-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gesture-icon {
+    font-size: 22px;
+    line-height: 1;
+}
+
+.gesture-label {
     font-weight: 600;
-    font-size: 13px;
+    font-size: 12px;
     color: #ccc;
+    text-transform: capitalize;
 }
 
-.mapping-row input[type="text"] {
+/* Shortcut Area */
+.shortcut-area {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.key-display {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-height: 34px;
+    padding: 4px 8px;
     background: #1a1a2e;
     border: 1px solid #333;
-    border-radius: 4px;
-    padding: 8px 10px;
-    color: #fff;
-    font-size: 13px;
-    font-family: monospace;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.2s;
 }
 
-.mapping-row input[type="text"]:focus {
-    outline: none;
+.key-display:hover {
     border-color: #00d4aa;
 }
 
-.mapping-row input[type="text"].recording {
-    border-color: #ff6b6b;
-    background: #2a1a2e;
+.key-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 8px;
+    background: linear-gradient(180deg, #3a3a5c, #2a2a4a);
+    border: 1px solid #555;
+    border-radius: 5px;
+    font-family: "Segoe UI", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    min-width: 28px;
+    text-align: center;
+    box-shadow: 0 2px 0 #1a1a2e;
+    white-space: nowrap;
 }
 
+.key-plus {
+    color: #666;
+    font-size: 12px;
+    font-weight: 700;
+    margin: 0 2px;
+}
+
+.key-empty {
+    color: #555;
+    font-size: 12px;
+    font-style: italic;
+}
+
+.key-recorder {
+    flex: 1;
+    background: #2a1a2e;
+    border: 2px solid #ff6b6b;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #fff;
+    font-size: 13px;
+    font-family: monospace;
+    outline: none;
+    animation: pulse-border 1s infinite;
+}
+
+@keyframes pulse-border {
+    0%, 100% { border-color: #ff6b6b; }
+    50% { border-color: #ff9b9b; }
+}
+
+/* Action Buttons */
+.shortcut-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.btn-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background: #1a1a2e;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    padding: 0;
+}
+
+.btn-icon:hover {
+    background: #2a2a4e;
+    color: #fff;
+    border-color: #666;
+}
+
+.btn-record:hover {
+    border-color: #00d4aa;
+    color: #00d4aa;
+}
+
+.btn-preset:hover {
+    border-color: #4a90d9;
+    color: #4a90d9;
+}
+
+.btn-clear:hover {
+    border-color: #ff6b6b;
+    color: #ff6b6b;
+}
+
+/* Toggle Switch */
 .toggle-switch {
     position: relative;
     width: 44px;
@@ -245,6 +383,7 @@ header h1 {
     transform: translateX(20px);
 }
 
+/* Settings */
 .settings {
     display: flex;
     flex-direction: column;
@@ -279,4 +418,84 @@ header h1 {
     margin-left: 12px;
     font-size: 13px;
     color: #00d4aa;
+}
+
+/* Preset Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 24px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    border: 1px solid #333;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.modal-header h3 {
+    color: #00d4aa;
+    font-size: 18px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.modal-close:hover {
+    color: #fff;
+}
+
+.preset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+}
+
+.preset-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 8px;
+    background: #0f3460;
+    border: 1px solid #333;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: 40px;
+}
+
+.preset-btn:hover {
+    background: #1a4a7a;
+    border-color: #00d4aa;
+}
+
+.preset-btn .key-badge {
+    font-size: 10px;
+    padding: 2px 6px;
 }
