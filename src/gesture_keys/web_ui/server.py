@@ -11,10 +11,17 @@ if TYPE_CHECKING:
     from gesture_keys.config import Config
     from gesture_keys.gesture_engine import GestureEngine
 
+from gesture_keys.constants import BUNDLE_DIR, _is_frozen
+
+if _is_frozen():
+    _web_ui_dir = BUNDLE_DIR / "gesture_keys" / "web_ui"
+else:
+    _web_ui_dir = __import__("pathlib").Path(__file__).parent
+
 app = Flask(
     __name__,
-    template_folder=str(__import__("pathlib").Path(__file__).parent / "templates"),
-    static_folder=str(__import__("pathlib").Path(__file__).parent / "static"),
+    template_folder=str(_web_ui_dir / "templates"),
+    static_folder=str(_web_ui_dir / "static"),
 )
 
 _config: Config | None = None
