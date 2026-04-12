@@ -25,7 +25,7 @@ echo.
 echo [2/3] Building GestureKeys.exe ...
 echo This may take a few minutes...
 echo.
-pyinstaller gesture_keys.spec --noconfirm
+python -m PyInstaller gesture_keys.spec --noconfirm
 if errorlevel 1 (
     echo ERROR: Build failed.
     pause

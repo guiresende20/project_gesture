@@ -5,8 +5,11 @@ import time
 from pathlib import Path
 from typing import Callable
 
+import logging
 import cv2
 import numpy as np
+
+log = logging.getLogger("gesture_keys")
 
 
 # MediaPipe hand connections (21 landmarks, pairs of indices)
@@ -83,31 +86,44 @@ class GestureEngine(threading.Thread):
         self._stop_event.set()
 
     def run(self) -> None:
-        import mediapipe as mp
-        from mediapipe.tasks import python as mp_python
-        from mediapipe.tasks.python import vision
+        try:
+            import mediapipe as mp
+            from mediapipe.tasks import python as mp_python
+            from mediapipe.tasks.python import vision
+        except Exception as e:
+            log.error("[GestureEngine] Failed to import mediapipe: %s", e, exc_info=True)
+            return
 
         self._mp = mp
 
-        base_options = mp_python.BaseOptions(
-            model_asset_path=str(self._model_path)
-        )
-        options = vision.GestureRecognizerOptions(
-            base_options=base_options,
-            running_mode=vision.RunningMode.IMAGE,
-            num_hands=1,
-            min_hand_detection_confidence=0.5,
-            min_hand_presence_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
+        try:
+            base_options = mp_python.BaseOptions(
+                model_asset_path=str(self._model_path)
+            )
+            options = vision.GestureRecognizerOptions(
+                base_options=base_options,
+                running_mode=vision.RunningMode.IMAGE,
+                num_hands=1,
+                min_hand_detection_confidence=0.5,
+                min_hand_presence_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+        except Exception as e:
+            log.error("[GestureEngine] Failed to configure mediapipe options: %s", e, exc_info=True)
+            return
 
         cap = None
         recognizer = None
         try:
             recognizer = vision.GestureRecognizer.create_from_options(options)
-            cap = cv2.VideoCapture(self._camera_index)
+            # Try DirectShow first (more reliable in frozen .exe on Windows),
+            # fall back to default backend if it fails.
+            cap = cv2.VideoCapture(self._camera_index, cv2.CAP_DSHOW)
             if not cap.isOpened():
-                print(f"Error: Could not open camera {self._camera_index}")
+                log.warning("CAP_DSHOW failed for camera %d, trying default backend.", self._camera_index)
+                cap = cv2.VideoCapture(self._camera_index)
+            if not cap.isOpened():
+                log.error("Could not open camera %d. Check if the camera is connected and not in use.", self._camera_index)
                 return
 
             # Reduce camera resolution for better performance
@@ -116,7 +132,7 @@ class GestureEngine(threading.Thread):
 
             self._recognition_loop(cap, recognizer)
         except Exception as e:
-            print(f"[GestureEngine] Fatal error: {e}")
+            log.error("[GestureEngine] Fatal error: %s", e)
         finally:
             if cap is not None:
                 cap.release()
@@ -165,7 +181,7 @@ class GestureEngine(threading.Thread):
                         gesture_name = top.category_name
                         gesture_score = top.score
             except Exception as e:
-                print(f"[GestureEngine] Recognition error: {e}")
+                log.error("[GestureEngine] Recognition error: %s", e)
 
             with self._lock:
                 self._current_gesture = gesture_name

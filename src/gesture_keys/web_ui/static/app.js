@@ -58,7 +58,10 @@ document.addEventListener("DOMContentLoaded", () => {
         { label: "F11 (Fullscreen)", keys: ["f11"] },
         { label: "Volume Up", keys: ["volumeup"] },
         { label: "Volume Down", keys: ["volumedown"] },
+        { label: "Mute", keys: ["volumemute"] },
         { label: "Play/Pause", keys: ["playpause"] },
+        { label: "Next Track", keys: ["nexttrack"] },
+        { label: "Prev Track", keys: ["prevtrack"] },
     ];
 
     // Load config
