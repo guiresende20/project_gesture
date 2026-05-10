@@ -9,6 +9,15 @@ import logging
 import cv2
 import numpy as np
 
+from gesture_keys.constants import (
+    CAMERA_HEIGHT,
+    CAMERA_RETRY_SLEEP_S,
+    CAMERA_WIDTH,
+    MAX_CAMERA_READ_FAILURES,
+    PAUSED_SLEEP_S,
+    TARGET_FPS,
+)
+
 log = logging.getLogger("gesture_keys")
 
 
@@ -21,10 +30,6 @@ _HAND_CONNECTIONS = [
     (0, 17), (17, 18), (18, 19), (19, 20), # pinky
     (5, 9), (9, 13), (13, 17),             # palm
 ]
-
-# Break the recognition loop after this many consecutive cap.read() failures
-# (~5s at 100ms/retry). Past this, the camera is almost certainly gone.
-_MAX_CAMERA_READ_FAILURES = 50
 
 
 class GestureEngine(threading.Thread):
@@ -133,8 +138,8 @@ class GestureEngine(threading.Thread):
                 return
 
             # Reduce camera resolution for better performance
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
 
             self._recognition_loop(cap, recognizer)
         except Exception as e:
@@ -146,78 +151,91 @@ class GestureEngine(threading.Thread):
                 recognizer.close()
 
     def _recognition_loop(self, cap, recognizer) -> None:
-        mp = self._mp
-        target_fps = 15
-        frame_interval = 1.0 / target_fps
+        frame_interval = 1.0 / TARGET_FPS
         read_failures = 0
 
         while not self._stop_event.is_set():
             loop_start = time.monotonic()
 
-            ret, frame = cap.read()
-            if not ret:
+            frame = self._read_next_frame(cap)
+            if frame is None:
                 read_failures += 1
-                if read_failures >= _MAX_CAMERA_READ_FAILURES:
+                if read_failures >= MAX_CAMERA_READ_FAILURES:
                     log.error(
                         "Camera read failed %d times in a row; stopping engine "
                         "(camera disconnected or in use by another process).",
                         read_failures,
                     )
                     return
-                time.sleep(0.1)
+                time.sleep(CAMERA_RETRY_SLEEP_S)
                 continue
             read_failures = 0
 
-            frame = cv2.flip(frame, 1)
-
             if self._paused.is_set():
-                # Atomic reference assignment; no lock needed.
-                self._latest_frame = frame
-                if self._on_frame:
-                    self._on_frame(frame)
-                time.sleep(0.03)
+                self._publish_paused(frame)
+                time.sleep(PAUSED_SLEEP_S)
                 continue
 
-            # Recognize gesture
-            gesture_name = None
-            gesture_score = 0.0
-
-            try:
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                result = recognizer.recognize(mp_image)
-
-                if result.hand_landmarks:
-                    self._draw_landmarks_cv2(frame, result.hand_landmarks[0])
-
-                if result.gestures and result.gestures[0]:
-                    top = result.gestures[0][0]
-                    threshold = self.confidence_threshold
-                    if top.category_name != "None" and top.score >= threshold:
-                        gesture_name = top.category_name
-                        gesture_score = top.score
-            except Exception as e:
-                log.error("[GestureEngine] Recognition error: %s", e)
-
-            # Publish gesture state under the small lock; frame is published
-            # separately via atomic reference assignment so MJPEG/UI readers
-            # don't block on a NumPy copy here.
-            with self._lock:
-                self._current_gesture = gesture_name
-                self._current_confidence = gesture_score
-            self._latest_frame = frame
-
-            if self._on_frame:
-                self._on_frame(frame)
-
-            if gesture_name and self._on_gesture:
-                self._on_gesture(gesture_name, gesture_score)
+            gesture_name, gesture_score = self._recognize(recognizer, frame)
+            self._publish(frame, gesture_name, gesture_score)
 
             # FPS limiter
             elapsed = time.monotonic() - loop_start
             sleep_time = frame_interval - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
+
+    def _read_next_frame(self, cap) -> np.ndarray | None:
+        ret, frame = cap.read()
+        if not ret:
+            return None
+        return cv2.flip(frame, 1)
+
+    def _recognize(
+        self, recognizer, frame: np.ndarray
+    ) -> tuple[str | None, float]:
+        """Run MediaPipe on `frame`, mutate it in-place to draw landmarks, and
+        return (gesture_name, score) — name is None when below threshold."""
+        try:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=rgb)
+            result = recognizer.recognize(mp_image)
+        except Exception as e:
+            log.error("[GestureEngine] Recognition error: %s", e)
+            return None, 0.0
+
+        if result.hand_landmarks:
+            self._draw_landmarks_cv2(frame, result.hand_landmarks[0])
+
+        if result.gestures and result.gestures[0]:
+            top = result.gestures[0][0]
+            if top.category_name != "None" and top.score >= self.confidence_threshold:
+                return top.category_name, top.score
+
+        return None, 0.0
+
+    def _publish(
+        self,
+        frame: np.ndarray,
+        gesture_name: str | None,
+        gesture_score: float,
+    ) -> None:
+        # Small lock guards only the cheap scalar fields. Frame is published
+        # via atomic reference assignment so MJPEG/UI readers don't block.
+        with self._lock:
+            self._current_gesture = gesture_name
+            self._current_confidence = gesture_score
+        self._latest_frame = frame
+
+        if self._on_frame:
+            self._on_frame(frame)
+        if gesture_name and self._on_gesture:
+            self._on_gesture(gesture_name, gesture_score)
+
+    def _publish_paused(self, frame: np.ndarray) -> None:
+        self._latest_frame = frame
+        if self._on_frame:
+            self._on_frame(frame)
 
     def _draw_landmarks_cv2(self, frame: np.ndarray, hand_landmarks: list) -> None:
         """Draw hand landmarks using pure OpenCV (no protobuf conversion)."""

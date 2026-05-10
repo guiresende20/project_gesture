@@ -68,6 +68,9 @@ document.addEventListener("DOMContentLoaded", () => {
     async function loadConfig() {
         try {
             const res = await fetch("/api/config");
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
             config = await res.json();
             renderMappings();
             cooldownSlider.value = config.cooldown_ms;
@@ -259,15 +262,32 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.target === presetModal) presetModal.style.display = "none";
     });
 
-    // Sliders
+    // Sliders — text updates immediately, config update is debounced so we
+    // don't spam updates while the user drags the slider.
+    function debounce(fn, wait) {
+        let t = null;
+        return (...args) => {
+            if (t !== null) clearTimeout(t);
+            t = setTimeout(() => { t = null; fn(...args); }, wait);
+        };
+    }
+
+    const commitCooldown = debounce((value) => {
+        if (config) config.cooldown_ms = value;
+    }, 150);
     cooldownSlider.addEventListener("input", () => {
+        const value = parseInt(cooldownSlider.value, 10);
         cooldownValue.textContent = cooldownSlider.value;
-        config.cooldown_ms = parseInt(cooldownSlider.value, 10);
+        commitCooldown(value);
     });
 
+    const commitThreshold = debounce((value) => {
+        if (config) config.confidence_threshold = value;
+    }, 150);
     thresholdSlider.addEventListener("input", () => {
-        thresholdValue.textContent = parseFloat(thresholdSlider.value).toFixed(2);
-        config.confidence_threshold = parseFloat(thresholdSlider.value);
+        const value = parseFloat(thresholdSlider.value);
+        thresholdValue.textContent = value.toFixed(2);
+        commitThreshold(value);
     });
 
     // Save
@@ -297,6 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
     toggleBtn.addEventListener("click", async () => {
         try {
             const res = await fetch("/api/toggle", { method: "POST" });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             updateStatusUI(data.running);
         } catch (e) {
@@ -312,10 +333,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Poll status - highlight active gesture
+    let consecutivePollErrors = 0;
     async function pollStatus() {
         try {
             const res = await fetch("/api/status");
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            consecutivePollErrors = 0;
             updateStatusUI(data.running);
             detectedGesture.textContent = data.gesture || "None";
             detectedConfidence.textContent = data.gesture
@@ -327,10 +351,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 row.classList.toggle("gesture-active",
                     row.dataset.gesture === data.gesture);
             });
-        } catch { /* ignore */ }
+        } catch (e) {
+            consecutivePollErrors += 1;
+            // Log only the first few so a disconnected server doesn't flood the console.
+            if (consecutivePollErrors <= 3) {
+                console.warn("Status poll failed:", e);
+            }
+        }
     }
 
     // Init
     loadConfig();
-    setInterval(pollStatus, 300);
+    const pollHandle = setInterval(pollStatus, 300);
+    window.addEventListener("beforeunload", () => clearInterval(pollHandle));
 });

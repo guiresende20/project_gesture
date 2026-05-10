@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
 import time
+
 from pynput.keyboard import Key, KeyCode, Controller
+
+log = logging.getLogger("gesture_keys")
 
 
 _MODIFIER_MAP: dict[str, Key] = {
@@ -74,6 +78,9 @@ class KeyExecutor:
         self._controller = Controller()
         self._cooldown_ms = cooldown_ms
         self._last_fire: dict[str, float] = {}
+        # Track keys we've already warned about so the log doesn't fill up:
+        # a typo'd key would otherwise produce one warning per gesture firing.
+        self._warned_keys: set[str] = set()
 
     @property
     def cooldown_ms(self) -> int:
@@ -101,10 +108,18 @@ class KeyExecutor:
             k_lower = k.lower().strip()
             if k_lower in _MODIFIER_MAP:
                 modifiers.append(_MODIFIER_MAP[k_lower])
-            else:
-                parsed = parse_key(k)
-                if parsed is not None:
-                    regular.append(parsed)
+                continue
+            parsed = parse_key(k)
+            if parsed is not None:
+                regular.append(parsed)
+                continue
+            if k not in self._warned_keys:
+                self._warned_keys.add(k)
+                log.warning(
+                    "Unknown key %r in mapping for gesture %r; ignored. "
+                    "Check your config for typos.",
+                    k, gesture,
+                )
 
         if not modifiers and not regular:
             return False

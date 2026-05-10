@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import logging.handlers
 import sys
 import threading
 import time
@@ -24,12 +25,18 @@ log = logging.getLogger("gesture_keys")
 
 
 def _setup_logging() -> None:
-    """Set up logging to file when running as frozen .exe."""
+    """Set up logging — rotating file when frozen .exe, stdout in dev."""
     handlers: list[logging.Handler] = []
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 
     if _is_frozen():
-        fh = logging.FileHandler(APP_DIR / "gesture_keys.log", encoding="utf-8")
+        # Rotate at 5 MB, keep 3 backups → ~20 MB cap on disk.
+        fh = logging.handlers.RotatingFileHandler(
+            APP_DIR / "gesture_keys.log",
+            maxBytes=5 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
         fh.setFormatter(fmt)
         handlers.append(fh)
     else:

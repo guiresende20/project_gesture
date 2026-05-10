@@ -14,7 +14,16 @@ if TYPE_CHECKING:
     from gesture_keys.config import Config
     from gesture_keys.gesture_engine import GestureEngine
 
-from gesture_keys.constants import BUNDLE_DIR, _is_frozen
+from gesture_keys.constants import (
+    BUNDLE_DIR,
+    CONFIDENCE_MAX,
+    CONFIDENCE_MIN,
+    COOLDOWN_MAX_MS,
+    COOLDOWN_MIN_MS,
+    MJPEG_FPS,
+    MJPEG_JPEG_QUALITY,
+    _is_frozen,
+)
 
 log = logging.getLogger("gesture_keys")
 
@@ -40,8 +49,8 @@ class JpegStreamer:
     def __init__(
         self,
         engine: "GestureEngine",
-        fps: int = 15,
-        jpeg_quality: int = 70,
+        fps: int = MJPEG_FPS,
+        jpeg_quality: int = MJPEG_JPEG_QUALITY,
     ) -> None:
         self._engine = engine
         self._interval = 1.0 / fps
@@ -174,10 +183,10 @@ def update_config():
         try:
             if "cooldown_ms" in data:
                 val = int(data["cooldown_ms"])
-                ctx.config.cooldown_ms = max(100, min(val, 5000))
+                ctx.config.cooldown_ms = max(COOLDOWN_MIN_MS, min(val, COOLDOWN_MAX_MS))
             if "confidence_threshold" in data:
                 val = float(data["confidence_threshold"])
-                ctx.config.confidence_threshold = max(0.1, min(val, 1.0))
+                ctx.config.confidence_threshold = max(CONFIDENCE_MIN, min(val, CONFIDENCE_MAX))
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid numeric value"}), 400
 
