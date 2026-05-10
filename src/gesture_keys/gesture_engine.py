@@ -22,6 +22,10 @@ _HAND_CONNECTIONS = [
     (5, 9), (9, 13), (13, 17),             # palm
 ]
 
+# Break the recognition loop after this many consecutive cap.read() failures
+# (~5s at 100ms/retry). Past this, the camera is almost certainly gone.
+_MAX_CAMERA_READ_FAILURES = 50
+
 
 class GestureEngine(threading.Thread):
     def __init__(
@@ -59,8 +63,10 @@ class GestureEngine(threading.Thread):
 
     @property
     def latest_frame(self) -> np.ndarray | None:
-        with self._lock:
-            return self._latest_frame.copy() if self._latest_frame is not None else None
+        # Reference read is GIL-atomic. The engine never mutates a frame after
+        # publishing it (each loop iteration creates a fresh array), so callers
+        # can safely read this reference without a lock or copy.
+        return self._latest_frame
 
     @property
     def is_paused(self) -> bool:
@@ -143,20 +149,30 @@ class GestureEngine(threading.Thread):
         mp = self._mp
         target_fps = 15
         frame_interval = 1.0 / target_fps
+        read_failures = 0
 
         while not self._stop_event.is_set():
             loop_start = time.monotonic()
 
             ret, frame = cap.read()
             if not ret:
-                time.sleep(0.01)
+                read_failures += 1
+                if read_failures >= _MAX_CAMERA_READ_FAILURES:
+                    log.error(
+                        "Camera read failed %d times in a row; stopping engine "
+                        "(camera disconnected or in use by another process).",
+                        read_failures,
+                    )
+                    return
+                time.sleep(0.1)
                 continue
+            read_failures = 0
 
             frame = cv2.flip(frame, 1)
 
             if self._paused.is_set():
-                with self._lock:
-                    self._latest_frame = frame
+                # Atomic reference assignment; no lock needed.
+                self._latest_frame = frame
                 if self._on_frame:
                     self._on_frame(frame)
                 time.sleep(0.03)
@@ -183,10 +199,13 @@ class GestureEngine(threading.Thread):
             except Exception as e:
                 log.error("[GestureEngine] Recognition error: %s", e)
 
+            # Publish gesture state under the small lock; frame is published
+            # separately via atomic reference assignment so MJPEG/UI readers
+            # don't block on a NumPy copy here.
             with self._lock:
                 self._current_gesture = gesture_name
                 self._current_confidence = gesture_score
-                self._latest_frame = frame
+            self._latest_frame = frame
 
             if self._on_frame:
                 self._on_frame(frame)
