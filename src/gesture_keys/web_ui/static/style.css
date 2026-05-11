@@ -687,3 +687,19 @@ header h1 {
 .camera-select option:disabled {
     color: #666;
 }
+
+.section-heading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.section-heading .toggle-default {
+    margin-left: auto;
+}
+
+.section-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+}
+

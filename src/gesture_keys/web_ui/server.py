@@ -178,6 +178,7 @@ def get_config():
             "cooldown_ms": ctx.config.cooldown_ms,
             "confidence_threshold": ctx.config.confidence_threshold,
             "camera_index": ctx.config.camera_index,
+            "default_enabled": ctx.config.default_enabled,
             "mappings": {
                 name: {"keys": m.keys, "enabled": m.enabled}
                 for name, m in ctx.config.mappings.items()
@@ -222,6 +223,8 @@ def update_config():
                 if val != ctx.config.camera_index:
                     ctx.config.camera_index = val
                     camera_index_changed = True
+            if "default_enabled" in data:
+                ctx.config.default_enabled = bool(data["default_enabled"])
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid numeric value"}), 400
 

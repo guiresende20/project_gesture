@@ -138,34 +138,74 @@ class TestResolveMapping:
         m = resolve_mapping(cfg, "Victory", "spotify")
         assert m.keys == ["playpause"]
 
-    def test_falls_back_to_default_when_no_app(self):
+    def test_default_fires_when_no_app(self):
         cfg = _make_config_with_profile()
         m = resolve_mapping(cfg, "Victory", None)
         assert m.keys == ["ctrl", "c"]
 
-    def test_falls_back_when_app_doesnt_match(self):
+    def test_default_fires_when_app_doesnt_match_any_profile(self):
         cfg = _make_config_with_profile()
         m = resolve_mapping(cfg, "Victory", "notepad")
         assert m.keys == ["ctrl", "c"]
 
-    def test_falls_back_when_profile_has_no_override_for_gesture(self):
+    def test_profile_match_blocks_unoverridden_gesture(self):
         cfg = _make_config_with_profile()
-        # Thumb_Up has a default mapping but the Spotify profile doesn't override it
-        m = resolve_mapping(cfg, "Thumb_Up", "spotify")
-        assert m.keys == ["enter"]
+        # Thumb_Up has a default mapping but the Spotify profile doesn't override it —
+        # under the new strict semantics, no fallback to default inside a matched profile.
+        assert resolve_mapping(cfg, "Thumb_Up", "spotify") is None
 
-    def test_falls_back_when_profile_override_is_disabled(self):
+    def test_profile_match_blocks_when_override_disabled(self):
         cfg = _make_config_with_profile()
         cfg.profiles[0].mappings["Victory"].enabled = False
-        m = resolve_mapping(cfg, "Victory", "spotify")
-        assert m.keys == ["ctrl", "c"]
+        assert resolve_mapping(cfg, "Victory", "spotify") is None
 
-    def test_falls_back_when_profile_override_has_no_keys(self):
+    def test_profile_match_blocks_when_override_has_no_keys(self):
         cfg = _make_config_with_profile()
         cfg.profiles[0].mappings["Victory"].keys = []
+        assert resolve_mapping(cfg, "Victory", "spotify") is None
+
+    def test_default_disabled_silences_unmatched_app(self):
+        cfg = _make_config_with_profile()
+        cfg.default_enabled = False
+        assert resolve_mapping(cfg, "Victory", "notepad") is None
+        assert resolve_mapping(cfg, "Thumb_Up", None) is None
+
+    def test_default_disabled_does_not_affect_profile_matches(self):
+        cfg = _make_config_with_profile()
+        cfg.default_enabled = False
         m = resolve_mapping(cfg, "Victory", "spotify")
-        assert m.keys == ["ctrl", "c"]
+        assert m.keys == ["playpause"]
 
     def test_returns_none_for_unknown_gesture(self):
         cfg = Config.default()
         assert resolve_mapping(cfg, "NotAGesture", None) is None
+
+
+class TestDefaultEnabledSerialization:
+    def test_round_trip_true(self, tmp_path):
+        cfg = Config.default()
+        cfg.default_enabled = True
+        path = tmp_path / "config.json"
+        cfg.save(path)
+        loaded = Config.load(path)
+        assert loaded.default_enabled is True
+
+    def test_round_trip_false(self, tmp_path):
+        cfg = Config.default()
+        cfg.default_enabled = False
+        path = tmp_path / "config.json"
+        cfg.save(path)
+        loaded = Config.load(path)
+        assert loaded.default_enabled is False
+
+    def test_load_missing_defaults_to_true(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"cooldown_ms": 500}))
+        cfg = Config.load(path)
+        assert cfg.default_enabled is True
+
+    def test_load_invalid_defaults_to_true(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"default_enabled": "yes"}))
+        cfg = Config.load(path)
+        assert cfg.default_enabled is True

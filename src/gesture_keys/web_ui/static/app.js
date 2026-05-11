@@ -21,6 +21,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const cameraSelect = document.getElementById("camera-select");
     const refreshCamerasBtn = document.getElementById("refresh-cameras-btn");
     const videoFeed = document.getElementById("video-feed");
+    const defaultEnabledToggle = document.getElementById("default-enabled-toggle");
+    const mappingsListEl = document.getElementById("mappings-list");
 
     let config = null;
     let activePresetGesture = null;
@@ -83,6 +85,11 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             config = await res.json();
             if (!Array.isArray(config.profiles)) config.profiles = [];
+            if (typeof config.default_enabled !== "boolean") config.default_enabled = true;
+            if (defaultEnabledToggle) {
+                defaultEnabledToggle.checked = config.default_enabled;
+                applyDefaultSectionState();
+            }
             renderMappings();
             renderProfiles();
             cooldownSlider.value = config.cooldown_ms;
@@ -170,6 +177,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (refreshCamerasBtn) {
         refreshCamerasBtn.addEventListener("click", () => {
             loadCameras();
+        });
+    }
+
+    function applyDefaultSectionState() {
+        if (!mappingsListEl) return;
+        mappingsListEl.classList.toggle("section-disabled", !config.default_enabled);
+    }
+
+    if (defaultEnabledToggle) {
+        defaultEnabledToggle.addEventListener("change", () => {
+            config.default_enabled = defaultEnabledToggle.checked;
+            applyDefaultSectionState();
         });
     }
 
@@ -467,7 +486,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const clearBtn = document.createElement("button");
             clearBtn.className = "btn-icon btn-clear";
             clearBtn.innerHTML = "✕";
-            clearBtn.title = "Clear override (fall back to default)";
+            clearBtn.title = "Clear override (gesture will not fire inside this profile)";
 
             actions.appendChild(recordBtn);
             actions.appendChild(presetBtn);

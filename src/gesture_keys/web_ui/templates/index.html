@@ -35,8 +35,14 @@
             </section>
 
             <section class="config-section">
-                <h2>Gesture Mappings</h2>
-                <p class="section-hint">Click the shortcut field and press your key combination (up to 3 keys)</p>
+                <h2 class="section-heading">
+                    <span>Default Mappings</span>
+                    <label class="toggle-switch toggle-default" title="When OFF, default mappings never fire — only profile-matched apps trigger gestures.">
+                        <input type="checkbox" id="default-enabled-toggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </h2>
+                <p class="section-hint">Default keys for apps without a matching profile. Turn the toggle off to silence gestures outside of profile-matched apps.</p>
                 <div id="mappings-list" class="mappings-list">
                     <!-- Populated by JS -->
                 </div>
@@ -44,7 +50,7 @@
                 <h2>App Profiles
                     <button id="add-profile-btn" class="btn-add-profile" title="Add profile">+</button>
                 </h2>
-                <p class="section-hint">Override gesture mappings per application. The first profile whose pattern matches the focused window's exe wins.</p>
+                <p class="section-hint">Per-app gesture sets. The first profile whose pattern matches the focused window's exe wins. Inside a profile, only listed gestures fire — unmapped gestures do NOT fall back to defaults.</p>
                 <div id="profiles-list" class="profiles-list">
                     <!-- Populated by JS -->
                 </div>

@@ -38,6 +38,7 @@ class Config:
     cooldown_ms: int = DEFAULT_COOLDOWN_MS
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD
     camera_index: int = 0
+    default_enabled: bool = True
     mappings: dict[str, GestureMapping] = field(default_factory=dict)
     profiles: list[Profile] = field(default_factory=list)
 
@@ -51,6 +52,7 @@ class Config:
             "cooldown_ms": self.cooldown_ms,
             "confidence_threshold": self.confidence_threshold,
             "camera_index": self.camera_index,
+            "default_enabled": self.default_enabled,
             "mappings": {
                 name: {"keys": m.keys, "enabled": m.enabled}
                 for name, m in self.mappings.items()
@@ -83,6 +85,7 @@ class Config:
             cooldown_ms=_validate_cooldown(raw.get("cooldown_ms")),
             confidence_threshold=_validate_threshold(raw.get("confidence_threshold")),
             camera_index=_validate_camera_index(raw.get("camera_index")),
+            default_enabled=_validate_default_enabled(raw.get("default_enabled")),
         )
 
         raw_mappings = raw.get("mappings") or {}
@@ -117,14 +120,19 @@ def find_active_profile(
 def resolve_mapping(
     config: Config, gesture: str, active_app: str | None
 ) -> GestureMapping | None:
-    """Profile override wins over the default only when the profile defines a
-    non-empty, enabled binding for this gesture. Otherwise fall through to
-    the default mapping."""
+    """Profile-scoped resolution:
+    - If a profile matches the active app: only that profile's overrides fire.
+      Gestures not overridden in the profile return None (no default fallback).
+    - If no profile matches: the default mapping fires only when
+      `default_enabled` is True. Otherwise return None."""
     profile = find_active_profile(config.profiles, active_app)
     if profile is not None:
         override = profile.mappings.get(gesture)
         if override is not None and override.keys and override.enabled:
             return override
+        return None
+    if not config.default_enabled:
+        return None
     return config.mappings.get(gesture)
 
 
@@ -152,6 +160,15 @@ def _validate_camera_index(value: object) -> int:
         log.warning("config: camera_index %r is negative; using 0.", value)
         return 0
     return idx
+
+
+def _validate_default_enabled(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, bool):
+        log.warning("config: default_enabled %r is not a bool; using True.", value)
+        return True
+    return value
 
 
 def _validate_threshold(value: object) -> float:
