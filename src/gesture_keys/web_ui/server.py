@@ -44,15 +44,18 @@ _CTX_KEY = "GK_CTX"
 class JpegStreamer:
     """Encodes the engine's latest frame to JPEG once per tick and serves the
     cached bytes to any number of MJPEG clients. Without this, every connected
-    client would call cv2.imencode independently on the same frame."""
+    client would call cv2.imencode independently on the same frame.
+
+    Reads the engine via a getter so the app can hot-swap engines (e.g. when
+    the user changes the camera index) without restarting the streamer."""
 
     def __init__(
         self,
-        engine: "GestureEngine",
+        engine_getter: Callable[[], "GestureEngine | None"],
         fps: int = MJPEG_FPS,
         jpeg_quality: int = MJPEG_JPEG_QUALITY,
     ) -> None:
-        self._engine = engine
+        self._engine_getter = engine_getter
         self._interval = 1.0 / fps
         self._quality = jpeg_quality
         self._cond = threading.Condition()
@@ -72,7 +75,8 @@ class JpegStreamer:
     def _run(self) -> None:
         last_frame_id: int | None = None
         while not self._stop_event.is_set():
-            frame = self._engine.latest_frame
+            engine = self._engine_getter()
+            frame = engine.latest_frame if engine is not None else None
             if frame is None:
                 time.sleep(self._interval)
                 continue
@@ -121,10 +125,11 @@ class JpegStreamer:
 @dataclass
 class AppContext:
     config: "Config"
-    engine: "GestureEngine"
+    engine: "GestureEngine"  # swapped when camera_index changes
     save_callback: Callable[[], None]
     config_lock: threading.Lock
     streamer: JpegStreamer
+    restart_engine: Callable[[], None] | None = None
 
 
 def _ctx() -> AppContext | None:
@@ -135,17 +140,27 @@ def init_app(
     config: "Config",
     engine: "GestureEngine",
     save_callback: Callable[[], None],
-) -> Flask:
-    streamer = JpegStreamer(engine)
+    restart_engine: Callable[[], None] | None = None,
+) -> "AppContext":
+    ctx_holder: dict = {}
+
+    def get_engine():
+        c = ctx_holder.get("ctx")
+        return c.engine if c is not None else None
+
+    streamer = JpegStreamer(get_engine)
     streamer.start()
-    app.config[_CTX_KEY] = AppContext(
+    ctx = AppContext(
         config=config,
         engine=engine,
         save_callback=save_callback,
         config_lock=threading.Lock(),
         streamer=streamer,
+        restart_engine=restart_engine,
     )
-    return app
+    ctx_holder["ctx"] = ctx
+    app.config[_CTX_KEY] = ctx
+    return ctx
 
 
 @app.route("/")
@@ -162,10 +177,22 @@ def get_config():
         return jsonify({
             "cooldown_ms": ctx.config.cooldown_ms,
             "confidence_threshold": ctx.config.confidence_threshold,
+            "camera_index": ctx.config.camera_index,
             "mappings": {
                 name: {"keys": m.keys, "enabled": m.enabled}
                 for name, m in ctx.config.mappings.items()
             },
+            "profiles": [
+                {
+                    "name": p.name,
+                    "app_patterns": p.app_patterns,
+                    "mappings": {
+                        name: {"keys": m.keys, "enabled": m.enabled}
+                        for name, m in p.mappings.items()
+                    },
+                }
+                for p in ctx.config.profiles
+            ],
         })
 
 
@@ -179,6 +206,7 @@ def update_config():
     if not data:
         return jsonify({"error": "Invalid JSON"}), 400
 
+    camera_index_changed = False
     with ctx.config_lock:
         try:
             if "cooldown_ms" in data:
@@ -187,12 +215,20 @@ def update_config():
             if "confidence_threshold" in data:
                 val = float(data["confidence_threshold"])
                 ctx.config.confidence_threshold = max(CONFIDENCE_MIN, min(val, CONFIDENCE_MAX))
+            if "camera_index" in data:
+                val = int(data["camera_index"])
+                if val < 0:
+                    return jsonify({"error": "camera_index must be >= 0"}), 400
+                if val != ctx.config.camera_index:
+                    ctx.config.camera_index = val
+                    camera_index_changed = True
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid numeric value"}), 400
 
+        from gesture_keys.config import GestureMapping, Profile
+        from gesture_keys.constants import GESTURE_NAMES
+
         if "mappings" in data:
-            from gesture_keys.config import GestureMapping
-            from gesture_keys.constants import GESTURE_NAMES
             for name, mapping_data in data["mappings"].items():
                 if name in ctx.config.mappings and name in GESTURE_NAMES:
                     keys = mapping_data.get("keys", [])
@@ -202,10 +238,73 @@ def update_config():
                             enabled=bool(mapping_data.get("enabled", False)),
                         )
 
+        if "profiles" in data:
+            profiles_data = data["profiles"]
+            if isinstance(profiles_data, list):
+                new_profiles: list[Profile] = []
+                for item in profiles_data:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("name", "")
+                    if not isinstance(name, str):
+                        name = ""
+                    raw_patterns = item.get("app_patterns", [])
+                    patterns: list[str] = []
+                    if isinstance(raw_patterns, list):
+                        patterns = [
+                            p.strip() for p in raw_patterns
+                            if isinstance(p, str) and p.strip()
+                        ]
+                    mappings_map: dict[str, GestureMapping] = {}
+                    raw_mappings = item.get("mappings", {})
+                    if isinstance(raw_mappings, dict):
+                        for gname, mdata in raw_mappings.items():
+                            if gname not in GESTURE_NAMES or not isinstance(mdata, dict):
+                                continue
+                            keys = mdata.get("keys", [])
+                            if not isinstance(keys, list) or not all(
+                                isinstance(k, str) for k in keys
+                            ):
+                                continue
+                            mappings_map[gname] = GestureMapping(
+                                keys=keys,
+                                enabled=bool(mdata.get("enabled", False)),
+                            )
+                    new_profiles.append(Profile(
+                        name=name,
+                        app_patterns=patterns,
+                        mappings=mappings_map,
+                    ))
+                ctx.config.profiles = new_profiles
+
     if ctx.save_callback:
         ctx.save_callback()
 
+    if camera_index_changed and ctx.restart_engine is not None:
+        try:
+            ctx.restart_engine()
+        except Exception:
+            log.exception("Engine restart after camera change failed")
+            return jsonify({"status": "ok", "warning": "engine restart failed"}), 200
+
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/cameras", methods=["GET"])
+def list_cameras_endpoint():
+    ctx = _ctx()
+    if ctx is None:
+        return jsonify({"error": "Not initialized"}), 503
+    from gesture_keys.camera import list_cameras
+    with ctx.config_lock:
+        current_index = ctx.config.camera_index
+    cams = list_cameras(current_index)
+    return jsonify({
+        "cameras": [
+            {"index": c.index, "available": c.available, "current": c.current}
+            for c in cams
+        ],
+    })
 
 
 @app.route("/api/status", methods=["GET"])
@@ -215,10 +314,23 @@ def get_status():
     gesture = engine.current_gesture if engine else None
     confidence = engine.current_confidence if engine else 0.0
     paused = engine.is_paused if engine else True
+
+    from gesture_keys.active_window import get_active_app
+    from gesture_keys.config import find_active_profile
+
+    active_app = get_active_app()
+    active_profile_name = None
+    if ctx is not None:
+        profile = find_active_profile(ctx.config.profiles, active_app)
+        if profile is not None:
+            active_profile_name = profile.name or None
+
     return jsonify({
         "gesture": gesture,
         "confidence": round(confidence, 3),
         "running": not paused,
+        "active_app": active_app,
+        "active_profile": active_profile_name,
     })
 
 

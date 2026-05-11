@@ -15,7 +15,8 @@ from gesture_keys.constants import (
     WEB_PORT,
     _is_frozen,
 )
-from gesture_keys.config import Config
+from gesture_keys.active_window import get_active_app
+from gesture_keys.config import Config, find_active_profile, resolve_mapping
 from gesture_keys.model_manager import ensure_model
 from gesture_keys.gesture_engine import GestureEngine
 from gesture_keys.key_executor import KeyExecutor
@@ -78,27 +79,68 @@ def main() -> None:
     executor = KeyExecutor(cooldown_ms=config.cooldown_ms)
 
     def on_gesture(gesture_name: str, confidence: float) -> None:
-        mapping = config.mappings.get(gesture_name)
+        active_app = get_active_app()
+        mapping = resolve_mapping(config, gesture_name, active_app)
         if mapping and mapping.enabled and mapping.keys:
             executed = executor.execute(gesture_name, mapping.keys)
             if executed:
-                log.info("[Gesture] %s (%.0f%%) -> %s", gesture_name, confidence * 100, " + ".join(mapping.keys))
+                profile = find_active_profile(config.profiles, active_app)
+                origin = f" [{profile.name or 'profile'}]" if profile and gesture_name in profile.mappings and profile.mappings[gesture_name].keys and profile.mappings[gesture_name].enabled else ""
+                log.info(
+                    "[Gesture] %s (%.0f%%)%s -> %s",
+                    gesture_name, confidence * 100, origin, " + ".join(mapping.keys),
+                )
 
-    # Gesture engine
-    engine = GestureEngine(
-        model_path=model_path,
-        confidence_threshold=config.confidence_threshold,
-        on_gesture=on_gesture,
-    )
+    # Gesture engine — held in a mutable cell so we can hot-swap it when the
+    # user changes the camera index from the web UI.
+    engine_cell: dict[str, GestureEngine] = {}
+
+    def build_engine() -> GestureEngine:
+        return GestureEngine(
+            model_path=model_path,
+            confidence_threshold=config.confidence_threshold,
+            on_gesture=on_gesture,
+            camera_index=config.camera_index,
+        )
+
+    engine_cell["engine"] = build_engine()
+
+    class _EngineProxy:
+        """Thin shim so existing code that captured `engine` early still sees
+        the live instance after a camera-induced restart."""
+        def __getattr__(self, name):
+            return getattr(engine_cell["engine"], name)
+
+    engine = _EngineProxy()
 
     def save_config() -> None:
         config.save(CONFIG_PATH)
         executor.cooldown_ms = config.cooldown_ms
-        engine.confidence_threshold = config.confidence_threshold
+        engine_cell["engine"].confidence_threshold = config.confidence_threshold
         log.info("Config saved.")
 
+    web_ctx_holder: dict = {}
+
+    def restart_engine() -> None:
+        old = engine_cell["engine"]
+        log.info("Restarting engine for camera_index=%d", config.camera_index)
+        old.stop()
+        old.join(timeout=5.0)
+        if old.is_alive():
+            log.warning("Previous engine thread did not stop within 5s; continuing anyway.")
+        new = build_engine()
+        engine_cell["engine"] = new
+        ctx = web_ctx_holder.get("ctx")
+        if ctx is not None:
+            ctx.engine = new
+        new.start()
+
     # Web UI
-    init_app(config, engine, save_callback=save_config)
+    web_ctx_holder["ctx"] = init_app(
+        config, engine_cell["engine"],
+        save_callback=save_config,
+        restart_engine=restart_engine,
+    )
     web_thread = threading.Thread(
         target=run_server,
         args=(WEB_HOST, WEB_PORT),

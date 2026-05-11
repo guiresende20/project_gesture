@@ -59,6 +59,15 @@ In the web UI you can:
 | `Victory` | `Ctrl + C` |
 | `Open_Palm` | `Space` |
 
+### Per-application Profiles
+
+You can override the default gesture mappings on a per-app basis. The first
+profile whose pattern is a substring of the focused window's exe name (e.g.
+`spotify` matches `Spotify.exe`) wins. If a profile doesn't override a given
+gesture (or the override is empty/disabled), the default mapping is used.
+
+The web UI shows the currently focused app and the active profile (if any).
+
 ### Config File
 
 Saved automatically to `config.json` in the project root.
@@ -70,7 +79,18 @@ Saved automatically to `config.json` in the project root.
   "mappings": {
     "Thumb_Up":    { "keys": ["enter"],     "enabled": true },
     "Closed_Fist": { "keys": ["alt", "F4"], "enabled": true }
-  }
+  },
+  "profiles": [
+    {
+      "name": "Spotify",
+      "app_patterns": ["spotify"],
+      "mappings": {
+        "Victory":    { "keys": ["playpause"], "enabled": true },
+        "Thumb_Up":   { "keys": ["nexttrack"], "enabled": true },
+        "Thumb_Down": { "keys": ["prevtrack"], "enabled": true }
+      }
+    }
+  ]
 }
 ```
 
@@ -110,7 +130,8 @@ src/gesture_keys/
 ├── __main__.py          # Entry point
 ├── app.py               # Bootstrap / wiring
 ├── constants.py         # Gesture names, URLs, defaults
-├── config.py            # Config load/save/dataclass
+├── config.py            # Config + profiles, load/save, resolve_mapping
+├── active_window.py     # Foreground app detection (Win32)
 ├── model_manager.py     # Auto-download gesture model
 ├── gesture_engine.py    # Webcam + MediaPipe thread
 ├── key_executor.py      # pynput keyboard simulation + cooldown

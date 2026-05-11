@@ -14,9 +14,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const presetModal = document.getElementById("preset-modal");
     const presetGrid = document.getElementById("preset-grid");
     const modalClose = document.getElementById("modal-close");
+    const profilesList = document.getElementById("profiles-list");
+    const addProfileBtn = document.getElementById("add-profile-btn");
+    const activeAppEl = document.getElementById("active-app");
+    const activeProfileEl = document.getElementById("active-profile");
+    const cameraSelect = document.getElementById("camera-select");
+    const refreshCamerasBtn = document.getElementById("refresh-cameras-btn");
+    const videoFeed = document.getElementById("video-feed");
 
     let config = null;
     let activePresetGesture = null;
+    // When a preset is chosen, target either the default mappings or a specific profile.
+    // Shape: { kind: "default" } or { kind: "profile", profileIndex: number, gesture: string }
+    let presetTarget = null;
 
     // Gesture icons
     const GESTURE_ICONS = {
@@ -72,14 +82,95 @@ document.addEventListener("DOMContentLoaded", () => {
                 throw new Error(`HTTP ${res.status}`);
             }
             config = await res.json();
+            if (!Array.isArray(config.profiles)) config.profiles = [];
             renderMappings();
+            renderProfiles();
             cooldownSlider.value = config.cooldown_ms;
             cooldownValue.textContent = config.cooldown_ms;
             thresholdSlider.value = config.confidence_threshold;
             thresholdValue.textContent = config.confidence_threshold.toFixed(2);
+            await loadCameras();
         } catch (e) {
             console.error("Failed to load config:", e);
         }
+    }
+
+    // Camera picker
+    async function loadCameras() {
+        if (!cameraSelect) return;
+        const previous = cameraSelect.value;
+        cameraSelect.disabled = true;
+        cameraSelect.innerHTML = "<option>Scanning...</option>";
+        try {
+            const res = await fetch("/api/cameras");
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            cameraSelect.innerHTML = "";
+            for (const cam of data.cameras) {
+                const opt = document.createElement("option");
+                opt.value = String(cam.index);
+                const tags = [];
+                if (cam.current) tags.push("current");
+                if (!cam.available && !cam.current) tags.push("unavailable");
+                const tagStr = tags.length ? ` (${tags.join(", ")})` : "";
+                opt.textContent = `Camera ${cam.index}${tagStr}`;
+                if (!cam.available && !cam.current) opt.disabled = true;
+                cameraSelect.appendChild(opt);
+            }
+            // Prefer current camera from config, else preserve previous selection
+            cameraSelect.value = String(config.camera_index);
+            if (cameraSelect.value === "" && previous) cameraSelect.value = previous;
+        } catch (e) {
+            console.error("Failed to load cameras:", e);
+            cameraSelect.innerHTML = "<option>Error</option>";
+        } finally {
+            cameraSelect.disabled = false;
+        }
+    }
+
+    async function applyCamera(newIndex) {
+        // Save just the camera_index field and trigger backend engine restart.
+        saveStatus.textContent = "Switching camera...";
+        saveStatus.style.color = "#aaa";
+        try {
+            const res = await fetch("/api/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ camera_index: newIndex }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                saveStatus.textContent = data.error || "Camera switch failed";
+                saveStatus.style.color = "#ff6b6b";
+                return;
+            }
+            config.camera_index = newIndex;
+            // Force MJPEG reconnect so the stream picks up the new engine
+            if (videoFeed) {
+                const src = videoFeed.src.split("?")[0];
+                videoFeed.src = `${src}?t=${Date.now()}`;
+            }
+            saveStatus.textContent = "Camera switched";
+            saveStatus.style.color = "#00d4aa";
+            setTimeout(() => { saveStatus.textContent = ""; }, 2000);
+        } catch (e) {
+            saveStatus.textContent = "Connection error";
+            saveStatus.style.color = "#ff6b6b";
+        }
+    }
+
+    if (cameraSelect) {
+        cameraSelect.addEventListener("change", () => {
+            const val = parseInt(cameraSelect.value, 10);
+            if (!Number.isNaN(val) && val !== config.camera_index) {
+                applyCamera(val);
+            }
+        });
+    }
+    if (refreshCamerasBtn) {
+        refreshCamerasBtn.addEventListener("click", () => {
+            loadCameras();
+        });
     }
 
     // Render styled key badges
@@ -220,6 +311,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Preset click
             presetBtn.addEventListener("click", () => {
                 activePresetGesture = gesture;
+                presetTarget = { kind: "default" };
                 showPresetModal();
             });
 
@@ -244,7 +336,21 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.className = "preset-btn";
             btn.innerHTML = renderKeyBadges(preset.keys);
             btn.addEventListener("click", () => {
-                if (activePresetGesture && config.mappings[activePresetGesture]) {
+                if (!activePresetGesture) {
+                    presetModal.style.display = "none";
+                    return;
+                }
+                if (presetTarget && presetTarget.kind === "profile") {
+                    const p = config.profiles[presetTarget.profileIndex];
+                    if (p) {
+                        if (!p.mappings[activePresetGesture]) {
+                            p.mappings[activePresetGesture] = { keys: [], enabled: true };
+                        }
+                        p.mappings[activePresetGesture].keys = [...preset.keys];
+                        p.mappings[activePresetGesture].enabled = true;
+                        renderProfiles();
+                    }
+                } else if (config.mappings[activePresetGesture]) {
                     config.mappings[activePresetGesture].keys = [...preset.keys];
                     renderMappings();
                 }
@@ -254,6 +360,189 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         presetModal.style.display = "flex";
     }
+
+    // Profiles UI
+    function renderProfiles() {
+        profilesList.innerHTML = "";
+        if (!config.profiles || config.profiles.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "profiles-empty";
+            empty.textContent = "No profiles yet. Click + to add one (e.g. \"Spotify\" matching \"spotify\").";
+            profilesList.appendChild(empty);
+            return;
+        }
+        config.profiles.forEach((profile, idx) => {
+            profilesList.appendChild(renderProfileCard(profile, idx));
+        });
+    }
+
+    function renderProfileCard(profile, idx) {
+        const card = document.createElement("div");
+        card.className = "profile-card";
+
+        // Header: name input + delete button
+        const header = document.createElement("div");
+        header.className = "profile-header";
+
+        const nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.className = "profile-name-input";
+        nameInput.placeholder = "Profile name (e.g. Spotify)";
+        nameInput.value = profile.name || "";
+        nameInput.addEventListener("input", () => {
+            config.profiles[idx].name = nameInput.value;
+        });
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "btn-icon btn-clear";
+        deleteBtn.innerHTML = "✕";
+        deleteBtn.title = "Delete profile";
+        deleteBtn.addEventListener("click", () => {
+            config.profiles.splice(idx, 1);
+            renderProfiles();
+        });
+
+        header.appendChild(nameInput);
+        header.appendChild(deleteBtn);
+
+        // Patterns input — comma-separated
+        const patternsRow = document.createElement("div");
+        patternsRow.className = "profile-patterns-row";
+        const patternsLabel = document.createElement("label");
+        patternsLabel.textContent = "Match exe (comma-separated):";
+        const patternsInput = document.createElement("input");
+        patternsInput.type = "text";
+        patternsInput.className = "profile-patterns-input";
+        patternsInput.placeholder = "spotify, chrome";
+        patternsInput.value = (profile.app_patterns || []).join(", ");
+        patternsInput.addEventListener("input", () => {
+            config.profiles[idx].app_patterns = patternsInput.value
+                .split(",")
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
+        });
+        patternsRow.appendChild(patternsLabel);
+        patternsRow.appendChild(patternsInput);
+
+        // Override rows — one per gesture
+        const overridesList = document.createElement("div");
+        overridesList.className = "profile-overrides";
+
+        const GESTURES_ORDER = Object.keys(config.mappings);
+        for (const gesture of GESTURES_ORDER) {
+            const override = profile.mappings[gesture] || { keys: [], enabled: false };
+            const isOverridden = override.keys.length > 0 && override.enabled;
+
+            const row = document.createElement("div");
+            row.className = "override-row" + (isOverridden ? " override-active" : "");
+
+            const labelArea = document.createElement("div");
+            labelArea.className = "gesture-info";
+            const icon = GESTURE_ICONS[gesture] || "";
+            labelArea.innerHTML = `<span class="gesture-icon">${icon}</span><span class="gesture-label">${gesture.replaceAll("_", " ")}</span>`;
+
+            const keyDisplay = document.createElement("div");
+            keyDisplay.className = "key-display";
+            keyDisplay.innerHTML = renderKeyBadges(override.keys);
+            keyDisplay.title = "Click to record override";
+
+            const keyInput = document.createElement("input");
+            keyInput.type = "text";
+            keyInput.className = "key-recorder";
+            keyInput.style.display = "none";
+
+            const actions = document.createElement("div");
+            actions.className = "shortcut-actions";
+
+            const recordBtn = document.createElement("button");
+            recordBtn.className = "btn-icon btn-record";
+            recordBtn.innerHTML = "⌨";
+            recordBtn.title = "Record override";
+
+            const presetBtn = document.createElement("button");
+            presetBtn.className = "btn-icon btn-preset";
+            presetBtn.innerHTML = "☰";
+            presetBtn.title = "Choose from presets";
+
+            const clearBtn = document.createElement("button");
+            clearBtn.className = "btn-icon btn-clear";
+            clearBtn.innerHTML = "✕";
+            clearBtn.title = "Clear override (fall back to default)";
+
+            actions.appendChild(recordBtn);
+            actions.appendChild(presetBtn);
+            actions.appendChild(clearBtn);
+
+            function startRecording() {
+                keyDisplay.style.display = "none";
+                keyInput.style.display = "block";
+                keyInput.value = "";
+                keyInput.focus();
+                row.classList.add("recording");
+            }
+            function stopRecording() {
+                keyDisplay.style.display = "flex";
+                keyInput.style.display = "none";
+                row.classList.remove("recording");
+            }
+
+            keyDisplay.addEventListener("click", startRecording);
+            recordBtn.addEventListener("click", startRecording);
+
+            keyInput.addEventListener("keydown", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const keys = [];
+                if (e.ctrlKey) keys.push("ctrl");
+                if (e.altKey) keys.push("alt");
+                if (e.shiftKey) keys.push("shift");
+                if (e.metaKey) keys.push("win");
+                const key = e.key;
+                if (["Control", "Alt", "Shift", "Meta"].includes(key)) return;
+                if (key === " ") keys.push("space");
+                else if (key.length === 1) keys.push(key.toLowerCase());
+                else keys.push(key.replace(/^Arrow/, "").toLowerCase());
+                const finalKeys = keys.slice(0, 3);
+                config.profiles[idx].mappings[gesture] = {
+                    keys: finalKeys,
+                    enabled: true,
+                };
+                renderProfiles();
+            });
+            keyInput.addEventListener("blur", stopRecording);
+
+            presetBtn.addEventListener("click", () => {
+                activePresetGesture = gesture;
+                presetTarget = { kind: "profile", profileIndex: idx, gesture };
+                showPresetModal();
+            });
+
+            clearBtn.addEventListener("click", () => {
+                delete config.profiles[idx].mappings[gesture];
+                renderProfiles();
+            });
+
+            row.appendChild(labelArea);
+            row.appendChild(keyDisplay);
+            row.appendChild(keyInput);
+            row.appendChild(actions);
+            overridesList.appendChild(row);
+        }
+
+        card.appendChild(header);
+        card.appendChild(patternsRow);
+        card.appendChild(overridesList);
+        return card;
+    }
+
+    addProfileBtn.addEventListener("click", () => {
+        config.profiles.push({
+            name: "",
+            app_patterns: [],
+            mappings: {},
+        });
+        renderProfiles();
+    });
 
     modalClose.addEventListener("click", () => {
         presetModal.style.display = "none";
@@ -351,6 +640,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 row.classList.toggle("gesture-active",
                     row.dataset.gesture === data.gesture);
             });
+
+            // Active app + profile indicator
+            if (activeAppEl) {
+                activeAppEl.textContent = data.active_app || "-";
+            }
+            if (activeProfileEl) {
+                if (data.active_profile) {
+                    activeProfileEl.textContent = data.active_profile;
+                    activeProfileEl.style.display = "";
+                } else {
+                    activeProfileEl.style.display = "none";
+                }
+            }
         } catch (e) {
             consecutivePollErrors += 1;
             // Log only the first few so a disconnected server doesn't flood the console.

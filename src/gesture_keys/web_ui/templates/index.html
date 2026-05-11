@@ -27,6 +27,11 @@
                     <span id="detected-gesture" class="gesture-name">None</span>
                     <span id="detected-confidence" class="confidence">(0%)</span>
                 </div>
+                <div class="active-app-info">
+                    <span class="label">Active app:</span>
+                    <span id="active-app" class="app-name">-</span>
+                    <span id="active-profile" class="profile-badge" style="display:none"></span>
+                </div>
             </section>
 
             <section class="config-section">
@@ -36,8 +41,21 @@
                     <!-- Populated by JS -->
                 </div>
 
+                <h2>App Profiles
+                    <button id="add-profile-btn" class="btn-add-profile" title="Add profile">+</button>
+                </h2>
+                <p class="section-hint">Override gesture mappings per application. The first profile whose pattern matches the focused window's exe wins.</p>
+                <div id="profiles-list" class="profiles-list">
+                    <!-- Populated by JS -->
+                </div>
+
                 <h2>Settings</h2>
                 <div class="settings">
+                    <div class="setting-row">
+                        <label for="camera-select">Camera:</label>
+                        <select id="camera-select" class="camera-select"></select>
+                        <button id="refresh-cameras-btn" class="btn-icon" title="Re-scan cameras">⟳</button>
+                    </div>
                     <div class="setting-row">
                         <label for="cooldown">Cooldown (ms):</label>
                         <input type="range" id="cooldown" min="100" max="3000" step="100">

@@ -76,3 +76,38 @@ class TestConfigSaveLoad:
         cfg = Config.default()
         cfg.save(path)
         assert path.exists()
+
+
+class TestCameraIndex:
+    def test_default_is_zero(self):
+        cfg = Config.default()
+        assert cfg.camera_index == 0
+
+    def test_round_trip(self, tmp_path):
+        cfg = Config.default()
+        cfg.camera_index = 2
+        path = tmp_path / "config.json"
+        cfg.save(path)
+        loaded = Config.load(path)
+        assert loaded.camera_index == 2
+
+    def test_negative_falls_back_to_zero(self, tmp_path):
+        import json
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"camera_index": -1}))
+        cfg = Config.load(path)
+        assert cfg.camera_index == 0
+
+    def test_non_numeric_falls_back_to_zero(self, tmp_path):
+        import json
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"camera_index": "two"}))
+        cfg = Config.load(path)
+        assert cfg.camera_index == 0
+
+    def test_missing_falls_back_to_zero(self, tmp_path):
+        import json
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({}))
+        cfg = Config.load(path)
+        assert cfg.camera_index == 0

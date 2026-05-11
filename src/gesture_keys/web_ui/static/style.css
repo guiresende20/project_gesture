@@ -499,3 +499,191 @@ header h1 {
     font-size: 10px;
     padding: 2px 6px;
 }
+
+/* Active app info under video */
+.active-app-info {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #0f3460;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.active-app-info .label {
+    color: #888;
+}
+
+.active-app-info .app-name {
+    font-family: monospace;
+    color: #e0e0e0;
+}
+
+.profile-badge {
+    padding: 2px 8px;
+    background: #00d4aa;
+    color: #1a1a2e;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* Profiles section */
+.btn-add-profile {
+    margin-left: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid #00d4aa;
+    background: transparent;
+    color: #00d4aa;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+
+.btn-add-profile:hover {
+    background: #00d4aa;
+    color: #1a1a2e;
+}
+
+.profiles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.profiles-empty {
+    color: #666;
+    font-size: 12px;
+    font-style: italic;
+    padding: 12px;
+    background: #0a1a2a;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.profile-card {
+    background: #0a1a2a;
+    border-radius: 10px;
+    padding: 12px;
+    border: 1px solid #1a3050;
+}
+
+.profile-header {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.profile-name-input {
+    flex: 1;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.profile-name-input:focus {
+    outline: none;
+    border-color: #00d4aa;
+}
+
+.profile-patterns-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.profile-patterns-row label {
+    font-size: 11px;
+    color: #888;
+}
+
+.profile-patterns-input {
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #fff;
+    font-size: 12px;
+    font-family: monospace;
+}
+
+.profile-patterns-input:focus {
+    outline: none;
+    border-color: #00d4aa;
+}
+
+.profile-overrides {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.override-row {
+    display: grid;
+    grid-template-columns: 110px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 10px;
+    background: #0f3460;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    opacity: 0.55;
+    transition: opacity 0.2s, border-color 0.2s;
+}
+
+.override-row.override-active {
+    opacity: 1;
+    border-color: #00d4aa;
+}
+
+.override-row.recording {
+    border-color: #ff6b6b;
+}
+
+.override-row .gesture-info {
+    gap: 6px;
+}
+
+.override-row .gesture-label {
+    font-size: 11px;
+}
+
+.override-row .key-display {
+    min-height: 28px;
+}
+
+/* Camera select */
+.camera-select {
+    flex: 1;
+    background: #1a1a2e;
+    color: #fff;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.camera-select:focus {
+    outline: none;
+    border-color: #00d4aa;
+}
+
+.camera-select option:disabled {
+    color: #666;
+}
