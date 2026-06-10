@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from gesture_keys.constants import (
@@ -79,7 +80,21 @@ class Config:
             cfg.save(path)
             return cfg
 
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            log.warning("config: invalid JSON in %s; backing up and recreating default.", path)
+            backup_path = _backup_invalid_config(path)
+            if backup_path is not None:
+                log.warning("config: invalid file backed up to %s.", backup_path)
+            cfg = Config.default()
+            cfg.save(path)
+            return cfg
+        if not isinstance(raw, dict):
+            log.warning("config: root value in %s is not an object; recreating default.", path)
+            cfg = Config.default()
+            cfg.save(path)
+            return cfg
 
         config = Config(
             cooldown_ms=_validate_cooldown(raw.get("cooldown_ms")),
@@ -238,3 +253,14 @@ def _validate_profiles(raw: object) -> list[Profile]:
         profiles.append(Profile(name=name, app_patterns=patterns, mappings=mappings))
 
     return profiles
+
+
+def _backup_invalid_config(path: Path) -> Path | None:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = path.with_name(f"{path.name}.invalid-{timestamp}")
+    try:
+        path.replace(backup_path)
+    except OSError:
+        log.warning("config: failed to back up invalid config %s.", path, exc_info=True)
+        return None
+    return backup_path

@@ -77,6 +77,27 @@ class TestConfigSaveLoad:
         cfg.save(path)
         assert path.exists()
 
+    def test_load_invalid_json_recreates_default_and_backs_up(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text("{not valid json", encoding="utf-8")
+
+        cfg = Config.load(path)
+
+        assert set(cfg.mappings.keys()) == set(GESTURE_NAMES)
+        assert json.loads(path.read_text(encoding="utf-8"))["mappings"]
+        backups = list(tmp_path.glob("config.json.invalid-*"))
+        assert len(backups) == 1
+        assert backups[0].read_text(encoding="utf-8") == "{not valid json"
+
+    def test_load_non_object_json_recreates_default(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+
+        cfg = Config.load(path)
+
+        assert set(cfg.mappings.keys()) == set(GESTURE_NAMES)
+        assert isinstance(json.loads(path.read_text(encoding="utf-8")), dict)
+
 
 class TestCameraIndex:
     def test_default_is_zero(self):

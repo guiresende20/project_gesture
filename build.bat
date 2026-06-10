@@ -7,7 +7,7 @@ echo.
 REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: Python not found. Install Python 3.10+ from python.org
+    echo ERROR: Python not found. Install Python 3.11+ from python.org
     pause
     exit /b 1
 )
@@ -37,9 +37,9 @@ echo ============================================
 echo   BUILD COMPLETE!
 echo ============================================
 echo.
-echo Output: dist\GestureKeys.exe
+echo Output: dist\GestureKeys\GestureKeys.exe
 echo.
-echo To distribute, share the GestureKeys.exe file.
-echo Users just double-click to run - no install needed!
+echo To distribute, share the whole dist\GestureKeys folder.
+echo Users run GestureKeys.exe from inside that folder - no install needed!
 echo.
 pause

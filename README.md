@@ -61,12 +61,15 @@ In the web UI you can:
 
 ### Per-application Profiles
 
-You can override the default gesture mappings on a per-app basis. The first
-profile whose pattern is a substring of the focused window's exe name (e.g.
-`spotify` matches `Spotify.exe`) wins. If a profile doesn't override a given
-gesture (or the override is empty/disabled), the default mapping is used.
+You can define gesture mappings on a per-app basis. The first profile whose
+pattern is a substring of the focused window's exe name (e.g. `spotify` matches
+`Spotify.exe`) wins. When a profile matches, only gestures explicitly mapped in
+that profile fire; unmapped, empty, or disabled gestures do not fall back to the
+default mappings.
 
 The web UI shows the currently focused app and the active profile (if any).
+The default mappings can also be disabled globally, so gestures only fire in
+profile-matched apps.
 
 ### Config File
 

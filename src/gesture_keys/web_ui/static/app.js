@@ -194,13 +194,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Render styled key badges
     function renderKeyBadges(keys) {
+        const fragment = document.createDocumentFragment();
         if (!keys || keys.length === 0) {
-            return '<span class="key-empty">Not assigned</span>';
+            const empty = document.createElement("span");
+            empty.className = "key-empty";
+            empty.textContent = "Not assigned";
+            fragment.appendChild(empty);
+            return fragment;
         }
-        return keys.map(k => {
+        keys.forEach((k, index) => {
+            if (index > 0) {
+                const plus = document.createElement("span");
+                plus.className = "key-plus";
+                plus.textContent = "+";
+                fragment.appendChild(plus);
+            }
             const display = k.charAt(0).toUpperCase() + k.slice(1);
-            return `<span class="key-badge">${display}</span>`;
-        }).join('<span class="key-plus">+</span>');
+            const badge = document.createElement("span");
+            badge.className = "key-badge";
+            badge.textContent = display;
+            fragment.appendChild(badge);
+        });
+        return fragment;
     }
 
     // Render gesture mapping rows
@@ -224,7 +239,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const keyDisplay = document.createElement("div");
             keyDisplay.className = "key-display";
-            keyDisplay.innerHTML = renderKeyBadges(mapping.keys);
+            keyDisplay.replaceChildren(renderKeyBadges(mapping.keys));
             keyDisplay.title = "Click to record new shortcut";
 
             // Hidden input for recording
@@ -320,7 +335,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     // Limit to 3 keys
                     const finalKeys = keys.slice(0, 3);
                     config.mappings[gesture].keys = finalKeys;
-                    keyDisplay.innerHTML = renderKeyBadges(finalKeys);
+                    keyDisplay.replaceChildren(renderKeyBadges(finalKeys));
                     stopRecording();
                 }
             });
@@ -337,7 +352,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Clear click
             clearBtn.addEventListener("click", () => {
                 config.mappings[gesture].keys = [];
-                keyDisplay.innerHTML = renderKeyBadges([]);
+                keyDisplay.replaceChildren(renderKeyBadges([]));
             });
 
             row.appendChild(labelArea);
@@ -353,7 +368,7 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const preset of PRESETS) {
             const btn = document.createElement("button");
             btn.className = "preset-btn";
-            btn.innerHTML = renderKeyBadges(preset.keys);
+            btn.replaceChildren(renderKeyBadges(preset.keys));
             btn.addEventListener("click", () => {
                 if (!activePresetGesture) {
                     presetModal.style.display = "none";
@@ -462,7 +477,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const keyDisplay = document.createElement("div");
             keyDisplay.className = "key-display";
-            keyDisplay.innerHTML = renderKeyBadges(override.keys);
+            keyDisplay.replaceChildren(renderKeyBadges(override.keys));
             keyDisplay.title = "Click to record override";
 
             const keyInput = document.createElement("input");
